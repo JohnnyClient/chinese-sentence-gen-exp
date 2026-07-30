@@ -1,4 +1,4 @@
-// === 1. АБСУРДНЫЙ СЛОВАРЬ (Расширен для свежести, логика вставки НЕ ТРОНУТА) ===
+// === 1. ABSURD WORDS DICTIONARY (Expanded for freshness, insertion logic UNTOUCHED) ===
 const ABSURD_WORDS = {
   noun: ["小阴茎", "阴茎", "屁股", "放屁", "狗屁", "王八", "笨蛋", "傻瓜", "混蛋", "夜壶", "马桶", "拖鞋", "臭虫", "蟑螂", "腋窝", "挠痒癖", "克尼斯莫拉格尼亚", "挠痒痒", "怕痒", "胳肢", "哬痒", "元宇宙", "内卷", "大聪明", "显眼包"],
   verb: ["放屁", "拉屎", "撒尿", "打嗝", "吃屎", "喝尿", "放风", "扯淡", "挠痒痒", "摸鱼", "躺平", "发癫"],
@@ -6,6 +6,7 @@ const ABSURD_WORDS = {
   adj: ["傻逼", "牛逼", "变态", "恶心", "臭", "脏", "丑", "奇葩", "逆天的", "抽象的", "离谱的"]
 };
 
+// Blacklist for grammatical terms and irrelevant concepts
 const BLACKLIST = new Set([
   "副词", "名词", "动词", "形容词", "状语", "定语", "主语", "谓语", "宾语", "补语",
   "语法", "词性", "词类", "句子", "短语", "词汇", "语言", "文字", "汉字",
@@ -22,7 +23,7 @@ let lexicon = null;
 let generatedNormal = [];
 let generatedAbsurd = [];
 
-// Добавлен measure_word (счетные слова)
+// Fallback lexicon in case the dictionary file fails to load
 const fallbackLexicon = {
   animate: ["人", "学生", "老师", "猫", "狗", "鸟"],
   inanimate: ["书", "东西", "水", "苹果", "车"],
@@ -34,11 +35,11 @@ const fallbackLexicon = {
   measure_word: ["个", "只", "条", "张", "本", "杯", "口", "辆", "块"]
 };
 
-// === 3. УЛУЧШЕНИЕ ДВИЖКА: localStorage кэш для мгновенной загрузки ===
+// === 3. ENGINE IMPROVEMENT: localStorage cache for instant loading ===
 async function loadLexicon() {
   if (lexicon) return lexicon;
   
-  // Проверяем кэш в браузере
+  // Check browser cache first
   const cached = localStorage.getItem('cedict_lexicon_cache');
   if (cached) {
     try {
@@ -51,13 +52,13 @@ async function loadLexicon() {
     }
   }
   
-  // Если кэша нет, грузим и парсим
+  // If no cache, fetch and parse the dictionary
   try {
     const response = await fetch('cedict.txt');
     if (response.ok) {
       const text = await response.text();
       lexicon = parseCedict(text);
-      // Сохраняем в кэш
+      // Save to cache for future use
       localStorage.setItem('cedict_lexicon_cache', JSON.stringify(lexicon));
       return lexicon;
     }
@@ -74,7 +75,7 @@ function parseCedict(text) {
     adj: [], adv: [], question_word: [], measure_word: [] 
   };
   
-  // === ЖЕСТКИЙ БАН ИМЕН СОБСТВЕННЫХ И УЕЗДОВ (ОСТАВЛЕН НА МЕСТЕ) ===
+  // === STRICT BAN ON PROPER NOUNS, COUNTIES, AND GEOGRAPHY (KEPT IN PLACE) ===
   const properNounPatterns = [
     /\bsurname\b/i, /\bgiven name\b/i, /\bpersonal name\b/i,
     /\bplace name\b/i, /\bcounty\b/i, /\bdistrict\b/i,
@@ -95,64 +96,65 @@ function parseCedict(text) {
     const [, , simp, , defs] = match;
     const defsLower = defs.toLowerCase();
     
+    // Basic length and character filters
     if (simp.length > 4 || simp.length < 1) continue;
     if (!/^[\u4e00-\u9fff]+$/.test(simp)) continue;
     if (BLACKLIST.has(simp)) continue;
     
-    // Если строка содержит маркер собственного имени, пропускаем её
+    // If the line contains a proper noun or geography marker, skip it entirely
     if (properNounPatterns.some(pattern => pattern.test(defsLower))) {
       continue; 
     }
     
-    // === УМНЫЙ ПАРСИНГ ПО КИТАЙСКИМ МАРКЕРАМ И АНГЛИЙСКИМ ОПРЕДЕЛЕНИЯМ ===
+    // === SMART PARSING BASED ON CHINESE MARKERS AND ENGLISH DEFINITIONS ===
     
-    // 1. Счетные слова (量词)
+    // 1. Measure words (classifiers)
     if (/\bmeasure word\b|\bclassifier\b/i.test(defsLower)) {
       data.measure_word.push(simp);
       continue;
     }
     
-    // 2. Вопросительные слова
+    // 2. Question words
     if (questionPatterns.test(defsLower)) {
       data.question_word.push(simp);
       continue;
     }
     
-    // 3. Наречия (часто заканчиваются на 地)
+    // 3. Adverbs (often end in 地)
     if (/\badv\b|\badverb\b/i.test(defsLower) || simp.endsWith('地')) {
       data.adv.push(simp);
       continue;
     }
     
-    // 4. Прилагательные (часто заканчиваются на 的)
+    // 4. Adjectives (often end in 的)
     if (/\badj\b|\badjective\b/i.test(defsLower) || simp.endsWith('的')) {
       data.adj.push(simp);
       continue;
     }
     
-    // 5. Глаголы
+    // 5. Verbs
     if (/\bverb\b|\bv\.i\.\b|\bv\.t\.\b/i.test(defsLower) || /\bto \w+\b/.test(defsLower)) {
       data.verb.push(simp);
       continue;
     }
     
-    // 6. Одушевленные существительные
+    // 6. Animate nouns
     if (animatePatterns.test(defsLower)) {
       data.animate.push(simp);
       continue;
     }
     
-    // 7. Локации (общие, не имена собственные, благодаря фильтру выше)
+    // 7. Locations (general, not proper nouns, thanks to the filter above)
     if (locationPatterns.test(defsLower)) {
       data.location.push(simp);
       continue;
     }
     
-    // 8. Всё остальное - неодушевленные существительные
+    // 8. Everything else goes to inanimate nouns
     data.inanimate.push(simp);
   }
   
-  // Дедупликация и фоллбэки
+  // Deduplicate and apply fallbacks if categories are empty
   for (const key in data) {
     data[key] = [...new Set(data[key])];
     if (!data[key].length && fallbackLexicon[key]) {
@@ -163,9 +165,9 @@ function parseCedict(text) {
   return data;
 }
 
-// === 1. ПРОКАЧКА "НОРМАЛЬНОГО" РЕЖИМА: Счетные слова + Коллокации ===
+// === 1. NORMAL MODE UPGRADE: Measure words + Collocations ===
 function generateNormalSentence(lex) {
-  // Добавлены шаблоны с measure_word (счетными словами)
+  // Templates updated to include measure_word for natural phrasing
   const templates = [
     ["{animate}{verb}{measure_word}{inanimate}。", ["animate", "verb", "measure_word", "inanimate"]],
     ["{animate}{verb}{location}。", ["animate", "verb", "location"]],
@@ -187,7 +189,7 @@ function generateNormalSentence(lex) {
   const [tmpl, slots] = templates[Math.floor(Math.random() * templates.length)];
   const parts = {};
   
-  // Простая карта коллокаций для естественности
+  // Simple collocation map for natural verb-object pairing
   const collocations = {
     "喝": ["水", "茶", "咖啡", "酒", "尿", "西北风"],
     "吃": ["苹果", "饭", "东西", "屎", "瓜", "土"],
@@ -196,7 +198,7 @@ function generateNormalSentence(lex) {
   };
 
   for (const slot of slots) {
-    // Если слот "inanimate" и мы уже выбрали глагол, для которого есть коллокации, используем их!
+    // If the slot is "inanimate" and we already picked a verb with specific collocations, use them!
     if (slot === "inanimate" && parts.verb && collocations[parts.verb]) {
       const list = collocations[parts.verb];
       parts[slot] = list[Math.floor(Math.random() * list.length)];
@@ -214,7 +216,7 @@ function generateNormalSentence(lex) {
   return result;
 }
 
-// === 2. АБСУРДНАЯ ЛОГИКА: НЕ ТРОНУТА, РАБОТАЕТ КАК РАНЬШЕ ===
+// === 2. ABSURD LOGIC: UNTOUCHED, WORKS EXACTLY AS BEFORE ===
 function makeAbsurd(sentence) {
   let words = Array.from(sentence);
   const insertions = Math.floor(Math.random() * 3) + 1;
@@ -244,13 +246,14 @@ function makeAbsurd(sentence) {
   return words.join("");
 }
 
-// --- UI LOGIC (БЕЗ ИЗМЕНЕНИЙ) ---
+// --- UI LOGIC (STRICTLY ENGLISH TEXT) ---
 document.addEventListener('DOMContentLoaded', () => {
   const generateBtn = document.getElementById('generateBtn');
   const copyCombinedBtn = document.getElementById('copyCombinedBtn');
   const normalOutput = document.getElementById('normalOutput');
   const absurdOutput = document.getElementById('absurdOutput');
 
+  // Generation logic
   generateBtn.addEventListener('click', async () => {
     generateBtn.disabled = true;
     normalOutput.textContent = "Loading dictionary...";
@@ -258,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const lex = await loadLexicon();
     let totalCount = parseInt(document.getElementById('count').value) || 10;
-    totalCount = Math.ceil(totalCount / 2) * 2; 
+    totalCount = Math.ceil(totalCount / 2) * 2; // Ensure even number
     
     const halfCount = totalCount / 2;
     generatedNormal = [];
@@ -275,6 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn.disabled = false;
   });
 
+  // Helper function to copy text without line breaks
   function copyToClipboard(text) {
     const cleanText = text.replace(/\n/g, ''); 
     navigator.clipboard.writeText(cleanText).then(() => true).catch(err => {
@@ -283,11 +287,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Copy only Normal or only Absurd
   document.querySelectorAll('.copy-single').forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.getAttribute('data-target');
       const text = target === 'normal' ? generatedNormal.join('\n') : generatedAbsurd.join('\n');
+      
       if (!text) return alert("Generate sentences first!");
+      
       copyToClipboard(text);
       const orig = btn.textContent;
       btn.textContent = "✅ Copied!";
@@ -295,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Smart 50/50 combined copying
   copyCombinedBtn.addEventListener('click', () => {
     if (generatedNormal.length === 0) return alert("Generate sentences first!");
     
@@ -323,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const absurdToCopy = getRandomElements(generatedAbsurd, halfCopy);
     const combined = [...normalToCopy, ...absurdToCopy];
     
+    // Shuffle the combined array
     for (let i = combined.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [combined[i], combined[j]] = [combined[j], combined[i]];
