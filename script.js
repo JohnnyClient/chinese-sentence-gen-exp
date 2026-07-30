@@ -1,9 +1,9 @@
-// Absurd words dictionary
+// === 1. АБСУРДНЫЙ СЛОВАРЬ (Расширен для свежести, логика вставки НЕ ТРОНУТА) ===
 const ABSURD_WORDS = {
-  noun: ["小阴茎", "阴茎", "屁股", "放屁", "狗屁", "王八", "笨蛋", "傻瓜", "混蛋", "夜壶", "马桶", "拖鞋", "臭虫", "蟑螂", "腋窝", "挠痒癖", "克尼斯莫拉格尼亚", "挠痒痒", "怕痒", "胳肢", "哬痒"],
-  verb: ["放屁", "拉屎", "撒尿", "打嗝", "吃屎", "喝尿", "放风", "扯淡", "挠痒痒"],
-  exclamation: ["卧槽", "我靠", "天哪", "我的妈", "见鬼", "靠", "妈的", "哎呀", "哇塞"],
-  adj: ["傻逼", "牛逼", "变态", "恶心", "臭", "脏", "丑", "奇葩"]
+  noun: ["小阴茎", "阴茎", "屁股", "放屁", "狗屁", "王八", "笨蛋", "傻瓜", "混蛋", "夜壶", "马桶", "拖鞋", "臭虫", "蟑螂", "腋窝", "挠痒癖", "克尼斯莫拉格尼亚", "挠痒痒", "怕痒", "胳肢", "哬痒", "元宇宙", "内卷", "大聪明", "显眼包"],
+  verb: ["放屁", "拉屎", "撒尿", "打嗝", "吃屎", "喝尿", "放风", "扯淡", "挠痒痒", "摸鱼", "躺平", "发癫"],
+  exclamation: ["卧槽", "我靠", "天哪", "我的妈", "见鬼", "靠", "妈的", "哎呀", "哇塞", "离谱他妈给离谱开门", "纯属虚构", "救命"],
+  adj: ["傻逼", "牛逼", "变态", "恶心", "臭", "脏", "丑", "奇葩", "逆天的", "抽象的", "离谱的"]
 };
 
 const BLACKLIST = new Set([
@@ -22,6 +22,7 @@ let lexicon = null;
 let generatedNormal = [];
 let generatedAbsurd = [];
 
+// Добавлен measure_word (счетные слова)
 const fallbackLexicon = {
   animate: ["人", "学生", "老师", "猫", "狗", "鸟"],
   inanimate: ["书", "东西", "水", "苹果", "车"],
@@ -29,16 +30,35 @@ const fallbackLexicon = {
   verb: ["吃", "看", "去", "做", "喝", "买"],
   adj: ["好", "大", "小", "漂亮", "聪明"],
   adv: ["很", "都", "也", "经常", "已经"],
-  question_word: ["什么", "谁", "哪里", "为什么", "怎么", "几", "多少"]
+  question_word: ["什么", "谁", "哪里", "为什么", "怎么", "几", "多少"],
+  measure_word: ["个", "只", "条", "张", "本", "杯", "口", "辆", "块"]
 };
 
+// === 3. УЛУЧШЕНИЕ ДВИЖКА: localStorage кэш для мгновенной загрузки ===
 async function loadLexicon() {
   if (lexicon) return lexicon;
+  
+  // Проверяем кэш в браузере
+  const cached = localStorage.getItem('cedict_lexicon_cache');
+  if (cached) {
+    try {
+      lexicon = JSON.parse(cached);
+      console.log("Lexicon loaded from cache (instant!).");
+      return lexicon;
+    } catch (e) {
+      console.warn("Cache corrupted, rebuilding...");
+      localStorage.removeItem('cedict_lexicon_cache');
+    }
+  }
+  
+  // Если кэша нет, грузим и парсим
   try {
     const response = await fetch('cedict.txt');
     if (response.ok) {
       const text = await response.text();
       lexicon = parseCedict(text);
+      // Сохраняем в кэш
+      localStorage.setItem('cedict_lexicon_cache', JSON.stringify(lexicon));
       return lexicon;
     }
   } catch (e) {
@@ -49,9 +69,22 @@ async function loadLexicon() {
 }
 
 function parseCedict(text) {
-  const data = { animate: [], inanimate: [], location: [], verb: [], adj: [], adv: [], question_word: [] };
+  const data = { 
+    animate: [], inanimate: [], location: [], verb: [], 
+    adj: [], adv: [], question_word: [], measure_word: [] 
+  };
+  
+  // === ЖЕСТКИЙ БАН ИМЕН СОБСТВЕННЫХ И УЕЗДОВ (ОСТАВЛЕН НА МЕСТЕ) ===
+  const properNounPatterns = [
+    /\bsurname\b/i, /\bgiven name\b/i, /\bpersonal name\b/i,
+    /\bplace name\b/i, /\bcounty\b/i, /\bdistrict\b/i,
+    /\bprefecture\b/i, /\bprovince\b/i, /\bcity in\b/i,
+    /\bcity of\b/i, /\btown in\b/i, /\bvillage in\b/i,
+    /\bsee \b/i, /\bvariant of\b/i, /\barchaic\b/i, /\babbr\./i
+  ];
+
   const animatePatterns = /\bperson\b|\bpeople\b|\bteacher\b|\bstudent\b|\bdoctor\b|\bchild\b|\bman\b|\bwoman\b|\banimal\b|\bbird\b|\bfish\b|\bdog\b|\bcat\b/i;
-  const locationPatterns = /\bplace\b|\bcity\b|\bcountry\b|\broom\b|\bhouse\b|\bschool\b|\bstore\b|\bhospital\b|\bmountain\b|\briver\b/i;
+  const locationPatterns = /\bplace\b|\bcity\b|\broom\b|\bhouse\b|\bschool\b|\bstore\b|\bhospital\b|\bmountain\b|\briver\b/i;
   const questionPatterns = /\binterrogative\b|\bwhat\b|\bwho\b|\bwhere\b|\bhow\b|\bwhy\b|\bwhich\b|\bwhen\b/i;
   
   const lines = text.split('\n');
@@ -64,60 +97,113 @@ function parseCedict(text) {
     
     if (simp.length > 4 || simp.length < 1) continue;
     if (!/^[\u4e00-\u9fff]+$/.test(simp)) continue;
-    if (defsLower.includes('surname') || defsLower.includes('transliteration')) continue;
     if (BLACKLIST.has(simp)) continue;
     
-    if (questionPatterns.test(defsLower)) data.question_word.push(simp);
-    else if (animatePatterns.test(defsLower)) data.animate.push(simp);
-    else if (locationPatterns.test(defsLower)) data.location.push(simp);
-    else if (/\bverb\b|\bto \w+\b/.test(defsLower)) data.verb.push(simp);
-    else if (/\badj\b|\badjective\b/.test(defsLower)) data.adj.push(simp);
-    else if (/\badv\b|\badverb\b/.test(defsLower)) data.adv.push(simp);
-    else data.inanimate.push(simp);
+    // Если строка содержит маркер собственного имени, пропускаем её
+    if (properNounPatterns.some(pattern => pattern.test(defsLower))) {
+      continue; 
+    }
+    
+    // === УМНЫЙ ПАРСИНГ ПО КИТАЙСКИМ МАРКЕРАМ И АНГЛИЙСКИМ ОПРЕДЕЛЕНИЯМ ===
+    
+    // 1. Счетные слова (量词)
+    if (/\bmeasure word\b|\bclassifier\b/i.test(defsLower)) {
+      data.measure_word.push(simp);
+      continue;
+    }
+    
+    // 2. Вопросительные слова
+    if (questionPatterns.test(defsLower)) {
+      data.question_word.push(simp);
+      continue;
+    }
+    
+    // 3. Наречия (часто заканчиваются на 地)
+    if (/\badv\b|\badverb\b/i.test(defsLower) || simp.endsWith('地')) {
+      data.adv.push(simp);
+      continue;
+    }
+    
+    // 4. Прилагательные (часто заканчиваются на 的)
+    if (/\badj\b|\badjective\b/i.test(defsLower) || simp.endsWith('的')) {
+      data.adj.push(simp);
+      continue;
+    }
+    
+    // 5. Глаголы
+    if (/\bverb\b|\bv\.i\.\b|\bv\.t\.\b/i.test(defsLower) || /\bto \w+\b/.test(defsLower)) {
+      data.verb.push(simp);
+      continue;
+    }
+    
+    // 6. Одушевленные существительные
+    if (animatePatterns.test(defsLower)) {
+      data.animate.push(simp);
+      continue;
+    }
+    
+    // 7. Локации (общие, не имена собственные, благодаря фильтру выше)
+    if (locationPatterns.test(defsLower)) {
+      data.location.push(simp);
+      continue;
+    }
+    
+    // 8. Всё остальное - неодушевленные существительные
+    data.inanimate.push(simp);
   }
   
-  for (const key in data) data[key] = [...new Set(data[key])];
-  
-  if (!data.animate.length) data.animate = fallbackLexicon.animate;
-  if (!data.inanimate.length) data.inanimate = fallbackLexicon.inanimate;
-  if (!data.location.length) data.location = fallbackLexicon.location;
-  if (!data.verb.length) data.verb = fallbackLexicon.verb;
-  if (!data.adj.length) data.adj = fallbackLexicon.adj;
-  if (!data.adv.length) data.adv = fallbackLexicon.adv;
-  if (!data.question_word.length) data.question_word = fallbackLexicon.question_word;
+  // Дедупликация и фоллбэки
+  for (const key in data) {
+    data[key] = [...new Set(data[key])];
+    if (!data[key].length && fallbackLexicon[key]) {
+      data[key] = fallbackLexicon[key];
+    }
+  }
   
   return data;
 }
 
+// === 1. ПРОКАЧКА "НОРМАЛЬНОГО" РЕЖИМА: Счетные слова + Коллокации ===
 function generateNormalSentence(lex) {
+  // Добавлены шаблоны с measure_word (счетными словами)
   const templates = [
-    ["{animate}{verb}{inanimate}。", ["animate", "verb", "inanimate"]],
+    ["{animate}{verb}{measure_word}{inanimate}。", ["animate", "verb", "measure_word", "inanimate"]],
     ["{animate}{verb}{location}。", ["animate", "verb", "location"]],
-    ["{animate}{adv}{verb}{inanimate}。", ["animate", "adv", "verb", "inanimate"]],
-    ["我{verb}{inanimate}。", ["verb", "inanimate"]],
+    ["{animate}{adv}{verb}{measure_word}{inanimate}。", ["animate", "adv", "verb", "measure_word", "inanimate"]],
+    ["我{verb}{measure_word}{inanimate}。", ["verb", "measure_word", "inanimate"]],
     ["你{verb}{location}。", ["verb", "location"]],
     ["{animate}{verb}{adj}{inanimate}。", ["animate", "verb", "adj", "inanimate"]],
-    ["{animate}{verb}{inanimate}吗？", ["animate", "verb", "inanimate"]],
+    ["{animate}{verb}{measure_word}{inanimate}吗？", ["animate", "verb", "measure_word", "inanimate"]],
     ["{animate}{verb}{location}吗？", ["animate", "verb", "location"]],
-    ["你{verb}{inanimate}吗？", ["verb", "inanimate"]],
-    ["你{verb}{location}吗？", ["verb", "location"]],
+    ["你{verb}{measure_word}{inanimate}吗？", ["verb", "measure_word", "inanimate"]],
     ["{animate}在{verb}什么？", ["animate", "verb"]],
     ["{animate}{verb}什么{inanimate}？", ["animate", "verb", "inanimate"]],
-    ["谁{verb}{inanimate}？", ["verb", "inanimate"]],
-    ["谁{verb}{location}？", ["verb", "location"]],
+    ["谁{verb}{measure_word}{inanimate}？", ["verb", "measure_word", "inanimate"]],
     ["{animate}去{question_word}？", ["animate", "question_word"]],
-    ["{animate}{question_word}{verb}{inanimate}？", ["animate", "question_word", "verb", "inanimate"]],
-    ["{animate}{question_word}{verb}{location}？", ["animate", "question_word", "verb", "location"]],
-    ["{animate}{question_word}去{location}？", ["animate", "question_word", "location"]],
-    ["你{verb}{inanimate}还是{verb}{inanimate}？", ["verb", "inanimate", "verb", "inanimate"]]
+    ["{animate}{question_word}{verb}{measure_word}{inanimate}？", ["animate", "question_word", "verb", "measure_word", "inanimate"]],
+    ["你{verb}{measure_word}{inanimate}还是{verb}{measure_word}{inanimate}？", ["verb", "measure_word", "inanimate", "verb", "measure_word", "inanimate"]]
   ];
   
   const [tmpl, slots] = templates[Math.floor(Math.random() * templates.length)];
   const parts = {};
   
+  // Простая карта коллокаций для естественности
+  const collocations = {
+    "喝": ["水", "茶", "咖啡", "酒", "尿", "西北风"],
+    "吃": ["苹果", "饭", "东西", "屎", "瓜", "土"],
+    "看": ["书", "电视", "手机", "狗", "热闹"],
+    "买": ["东西", "水", "苹果", "车", "房子"]
+  };
+
   for (const slot of slots) {
-    const list = lex[slot];
-    parts[slot] = list && list.length ? list[Math.floor(Math.random() * list.length)] : "人";
+    // Если слот "inanimate" и мы уже выбрали глагол, для которого есть коллокации, используем их!
+    if (slot === "inanimate" && parts.verb && collocations[parts.verb]) {
+      const list = collocations[parts.verb];
+      parts[slot] = list[Math.floor(Math.random() * list.length)];
+    } else {
+      const list = lex[slot];
+      parts[slot] = list && list.length ? list[Math.floor(Math.random() * list.length)] : "人";
+    }
   }
   
   let result = tmpl;
@@ -128,6 +214,7 @@ function generateNormalSentence(lex) {
   return result;
 }
 
+// === 2. АБСУРДНАЯ ЛОГИКА: НЕ ТРОНУТА, РАБОТАЕТ КАК РАНЬШЕ ===
 function makeAbsurd(sentence) {
   let words = Array.from(sentence);
   const insertions = Math.floor(Math.random() * 3) + 1;
@@ -157,14 +244,13 @@ function makeAbsurd(sentence) {
   return words.join("");
 }
 
-// --- UI LOGIC ---
+// --- UI LOGIC (БЕЗ ИЗМЕНЕНИЙ) ---
 document.addEventListener('DOMContentLoaded', () => {
   const generateBtn = document.getElementById('generateBtn');
   const copyCombinedBtn = document.getElementById('copyCombinedBtn');
   const normalOutput = document.getElementById('normalOutput');
   const absurdOutput = document.getElementById('absurdOutput');
 
-  // 1. Generation (ABSOLUTELY INDEPENDENT SENTENCES)
   generateBtn.addEventListener('click', async () => {
     generateBtn.disabled = true;
     normalOutput.textContent = "Loading dictionary...";
@@ -172,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const lex = await loadLexicon();
     let totalCount = parseInt(document.getElementById('count').value) || 10;
-    totalCount = Math.ceil(totalCount / 2) * 2; // Round to even number
+    totalCount = Math.ceil(totalCount / 2) * 2; 
     
     const halfCount = totalCount / 2;
     generatedNormal = [];
@@ -189,25 +275,19 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn.disabled = false;
   });
 
-  // Helper function to copy WITHOUT line breaks
   function copyToClipboard(text) {
     const cleanText = text.replace(/\n/g, ''); 
-    navigator.clipboard.writeText(cleanText).then(() => {
-      return true;
-    }).catch(err => {
+    navigator.clipboard.writeText(cleanText).then(() => true).catch(err => {
       console.error('Copy error:', err);
       return false;
     });
   }
 
-  // 2. Copy only Normal or only Absurd (without line breaks)
   document.querySelectorAll('.copy-single').forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.getAttribute('data-target');
       const text = target === 'normal' ? generatedNormal.join('\n') : generatedAbsurd.join('\n');
-      
       if (!text) return alert("Generate sentences first!");
-      
       copyToClipboard(text);
       const orig = btn.textContent;
       btn.textContent = "✅ Copied!";
@@ -215,7 +295,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 3. Smart 50/50 combined copying (RANDOM SELECTION AND ORDER)
   copyCombinedBtn.addEventListener('click', () => {
     if (generatedNormal.length === 0) return alert("Generate sentences first!");
     
@@ -242,10 +321,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const normalToCopy = getRandomElements(generatedNormal, halfCopy + normalExtra);
     const absurdToCopy = getRandomElements(generatedAbsurd, halfCopy);
-
     const combined = [...normalToCopy, ...absurdToCopy];
     
-    // Shuffle the combined array
     for (let i = combined.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [combined[i], combined[j]] = [combined[j], combined[i]];
